@@ -11,13 +11,14 @@ function get_post_type_enabled_display(){
 		'shop_subscription'
 	];
 
-	return apply_filters('display_metadata_postype',$post_type);
+	return apply_filters('display_metadata_post_type',$post_type);
 
 }
 
 function get_post_data_keys(){
 
 	$post_data_keys = [
+		'post_status',
 		'post_parent',
 		'post_type',
 	];
@@ -68,7 +69,7 @@ function display_values_in_table($title, $data){
 
 	?>
 <h3><?=$title?></h3>
-<table>
+<table class="metadata-table">
 	<?php
 	
 	foreach( $data as $key => $value ){
@@ -119,7 +120,48 @@ function get_value_display_markup($value){
 
 	if ( is_string($value_to_display) || is_int($value_to_display) ) return $value_to_display;
 
-	return htmlentities( var_export($value_to_display,true));
+	return  get_iterable_as_display_markup($value_to_display);
+}
+
+function get_iterable_as_display_markup($data){
+
+	$result ='[<br>';
+
+    $result .= <<<HTML
+    <table class="iterable-table">
+            <tbody>
+    HTML;
+
+    foreach( $data as $key=> $value ){
+
+        $key_display = htmlentities($key);
+
+
+        $value_display =  get_value_display( $value );
+
+        $result .= <<<HTML
+        <tr>
+            <td class="iterable-key words-unbreakable">     $key_display</td>
+            <td class="iterable-arrow words-unbreakable">=></td>
+            <td class="iterable-value">$value_display</td>
+        </tr>
+        HTML;
+    }
+
+    $result .= <<<HTML
+    </tbody>
+    </table>
+    HTML;
+
+	$result .= '<br>]';
+    return trim($result);
+}
+
+function get_value_display( $value ){
+
+    if(empty($value)) return '';
+
+    return is_iterable($value) ? get_iterable_as_display_markup( $value ) : htmlentities($value);
 }
 
 function get_value_string($value_array){
@@ -195,15 +237,59 @@ function is_invalid_unserialization( $value, $unserialised_value){
 function the_metadata_metabox_css(){
 	?>
 <style>
+.metadata-table{
+	width: 100%; 
+    table-layout: auto; 
+    border-collapse: collapse;
+}
+.metadata-key{
+	white-space: nowrap;
+}
+.metadata-value{
+
+	white-space: break-spaces;
+}
+
+
 .metadata-key,
 .metadata-value{
 	padding:0 10px 10px 0;
 	vertical-align: baseline;
-	white-space: break-spaces;
 }
 .metadata-row{
 	margin-bottom: 10px;
 }
+
+
+.iterable-table {
+    width: 100%; 
+    border-collapse: collapse;
+    margin-bottom: 10px;
+}
+
+.iterable-arrow {
+    padding: 0 5px; 
+}
+
+.iterable-key {
+    width: max-content;
+    display: block;
+}
+.iterable-value {
+    word-break: break-word;
+    overflow-wrap: break-word; 
+}
+
+
+.words-unbreakable{
+    word-break: keep-all;
+}
+.iterable-table, .iterable-wrap, .iterable-arrow{
+
+    vertical-align: baseline;
+	max-width: max-content;
+}
+
 </style>
 	<?php
 }
