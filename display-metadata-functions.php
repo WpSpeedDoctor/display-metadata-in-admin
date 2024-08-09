@@ -3,16 +3,21 @@ namespace display_metadata;
 
 function get_post_type_enabled_display(){
 
+	return null; //displays on all post types
+
+/*
 	$post_type = [
+
 		'post',
 		'page',
 		'product',
 		'shop_order',
 		'shop_subscription'
+
 	];
 
 	return apply_filters('display_metadata_post_type',$post_type);
-
+*/
 }
 
 function get_post_data_keys(){
@@ -39,7 +44,7 @@ function add_my_metabox(){
 function add_display_metadata_metabox(){
 
 		add_meta_box(
-			'postmeta',
+			'wpsd-display-postmeta',
 			'Post and Postmeta',
 			'display_metadata\display_postmeta_in_metabox', 
 			get_post_type_enabled_display(),                
@@ -57,7 +62,7 @@ function display_postmeta_in_metabox() {
 	
 	?><hr><?php
 	
-	$post_meta = get_post_meta( get_the_id());
+	$post_meta = get_post_meta( get_the_id() );
 
 	display_values_in_table('Postmeta', $post_meta);
 		
@@ -67,10 +72,10 @@ function display_values_in_table($title, $data){
 
 	if ( empty($data) ) return;
 
-	?>
-<h3><?=$title?></h3>
-<table class="metadata-table">
-	<?php
+	echo <<<HTML
+	<h3>{$title}</h3>
+	<table class="metadata-table">
+	HTML;
 	
 	foreach( $data as $key => $value ){
 
@@ -103,13 +108,14 @@ function get_post_data(){
 
 }
 
-function display_metadata_value($key,$value_to_display){
-	?>
+function display_metadata_value($key, $value_to_display) {
+	
+	echo <<<HTML
 	<tr class="metadata-row">
-		<td class="metadata-key"><?=$key?></td>
-		<td class="metadata-value"><?=$value_to_display?></td>
+		<td class="metadata-key">{$key}</td>
+		<td class="metadata-value">{$value_to_display}</td>
 	</tr>
-	<?php
+	HTML;
 }
 
 function get_value_display_markup($value){
@@ -117,27 +123,42 @@ function get_value_display_markup($value){
 	$multiple_values_as_string = get_value_string($value);
 
 	$value_to_display = get_value_unserialized_or_json_decode($multiple_values_as_string);
+	
+	if ( is_string($value_to_display) || is_int($value_to_display) ) return htmlentities($value_to_display);
 
-	if ( is_string($value_to_display) || is_int($value_to_display) ) return $value_to_display;
-
-	return  get_iterable_as_display_markup($value_to_display);
+	return get_iterable_as_display_markup($value_to_display);
 }
 
 function get_iterable_as_display_markup($data){
 
-	$result ='[<br>';
+	if( is_array($data) && empty($data) ) return '[ ]';
 
-    $result .= <<<HTML
-    <table class="iterable-table">
-            <tbody>
+	if( is_object($data) && empty($data) ) return '[ ]';
+
+	$result_loop = get_iterable_as_display_markup_loop($data);
+
+	if($result_loop === '') return htmlentities( var_export($data,true) ); 
+
+    $result = <<<HTML
+    [<br><table class="iterable-table">
+        <tbody>
+            {$result_loop}
+    </tbody>
+    </table><br>]
     HTML;
+
+    return trim($result);
+}
+
+function get_iterable_as_display_markup_loop($data){
+
+	$result = '';
 
     foreach( $data as $key=> $value ){
 
         $key_display = htmlentities($key);
 
-
-        $value_display =  get_value_display( $value );
+        $value_display = get_value_display( $value );
 
         $result .= <<<HTML
         <tr>
@@ -148,25 +169,24 @@ function get_iterable_as_display_markup($data){
         HTML;
     }
 
-    $result .= <<<HTML
-    </tbody>
-    </table>
-    HTML;
+	return $result === '' ? htmlentities( var_export($data,true) ) : $result; 
 
-	$result .= '<br>]';
-    return trim($result);
 }
 
 function get_value_display( $value ){
+	
+	if( is_bool($value) ) return $value ? 'bool:true':'bool:false';
 
-    if(empty($value)) return '';
+	if( $value === null ) return 'NULL';
 
-    return is_iterable($value) ? get_iterable_as_display_markup( $value ) : htmlentities($value);
+	if( is_numeric($value) || is_string($value) ) return htmlentities( $value );
+
+    return get_iterable_as_display_markup( $value );
 }
 
 function get_value_string($value_array){
 
-	if ( count($value_array)===1 ) return $value_array[0];
+	if ( count($value_array)===1 ) return reset($value_array);
 
 	$result = '';
 
@@ -187,51 +207,20 @@ function get_value_based_on_type($value_to_display){
 	return var_export($value_to_display,true);
 }
 
-function get_value_unserialized_or_json_decode($value){
-
-	$result = get_unserialised_value($value);
-
-	if ($result !== null ) return $result;
-
-	$result = get_json_decode_value($value);
-
-	if ($result !== null ) return $result;
-
-	return $value;
-}
-
-function get_json_decode_value($value){
+function get_value_unserialized_or_json_decode( $value ){
 	
-	$value_without_spaces = trim($value);
-	
-	if ( $value_without_spaces ==='' || !isset($value_without_spaces[0]) ) return '';
+	if( is_numeric($value) ) return $value;
 
-	$json_starting_characters=['"','{','['];
+	if( is_serialized($value) ) return unserialize($value);
 
-	if ( !in_array($value_without_spaces[0],$json_starting_characters) ) return null;
-	
-	return json_decode($value_without_spaces,true);
-}
+	$result = json_decode($value,true);
 
-function get_unserialised_value($value){
-
-	if ( ($value[1]??'') !==':') return null;
-
-	$unserialised_value = @unserialize($value);
-
-	return is_invalid_unserialization( $value, $unserialised_value) ? null: $unserialised_value;
-}
-
-function is_invalid_unserialization( $value, $unserialised_value){
-
-	if( $unserialised_value === $value ) return true;
-
-	return $value !=="b:0;" && $unserialised_value === false;
+	return json_last_error() === 0 ? $result : $value;
 }
 
 /*
  * inlined CSS because life is too short to enqueue
- * 8 lines of CSS as an external file :)
+ * a few lines of CSS as an external file :)
  */
 
 function the_metadata_metabox_css(){
@@ -250,7 +239,6 @@ function the_metadata_metabox_css(){
 	white-space: break-spaces;
 }
 
-
 .metadata-key,
 .metadata-value{
 	padding:0 10px 10px 0;
@@ -260,11 +248,9 @@ function the_metadata_metabox_css(){
 	margin-bottom: 10px;
 }
 
-
 .iterable-table {
     width: 100%; 
     border-collapse: collapse;
-    margin-bottom: 10px;
 }
 
 .iterable-arrow {
